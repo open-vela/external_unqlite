@@ -28,6 +28,11 @@ config SXMEM_POOL_INCR
 	int "memory pool increment step"
 	default 3
 
+config UNQLITE_LOCK_BY_SEM
+	bool "use named semaphores as filelocks"
+	default y
+	select FS_NAMED_SEMAPHORES
+
 config UNQLITE_ENABLE_DIRSYNC
 	bool "disable upper level directory sync"
 	default n
