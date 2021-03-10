@@ -42,4 +42,7 @@ ifneq ($(CONFIG_JX9_ENABLE_MATH_FUNC),)
 CFLAGS += -DJX9_ENABLE_MATH_FUNC
 endif
 
+CFLAGS += -Wno-unused-function -Wno-misleading-indentation
+CFLAGS += -Wno-shadow -Wno-unused-but-set-variable
+
 include $(APPDIR)/Application.mk
