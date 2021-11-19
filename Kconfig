@@ -22,11 +22,11 @@ if UNQLITE
 
 config SXMEM_POOL_NBUCKETS
 	int "memory pool bucket number"
-	default 12
+	default 8
 
 config SXMEM_POOL_INCR
 	int "memory pool increment step"
-	default 3
+	default 1
 
 config UNQLITE_LOCK_BY_SEM
 	bool "use named semaphores as filelocks"
