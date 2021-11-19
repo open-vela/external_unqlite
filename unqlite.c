@@ -730,7 +730,7 @@ struct unqlite_page
 {
   unsigned char *zData;       /* Content of this page */
   void *pUserData;            /* Extra content */
-  pgno iPage;                 /* Page number for this page */
+  pgno pgno;                  /* Page number for this page */
 };
 /*
  * UnQLite handle to the underlying Key/Value Storage Engine (See below).
@@ -4312,6 +4312,9 @@ UNQLITE_PRIVATE const SyMemBackend * unqliteExportMemBackend(void)
  * [CAPIREF: unqlite_open()]
  * Please refer to the official documentation for function purpose and expected parameters.
  */
+#if defined(UNQLITE_LOCK_BY_SEM)
+#include<semaphore.h>
+#endif
 int unqlite_open(unqlite **ppDB,const char *zFilename,unsigned int iMode)
 {
 	unqlite *pHandle;
@@ -25476,8 +25479,7 @@ static sxi32 VmJsonTokenize(SyStream *pStream, SyToken *pToken, void *pUserData,
 			pToken->nType = JSON_TK_STR;
 			pStream->zText++; /* Jump the closing double quotes */
 		}
-	}else if( (pStream->zText[0] < 0xc0 && SyisDigit(pStream->zText[0]))
-	        || pStream->zText[0] == '-' || pStream->zText[0] == '+' ){
+	}else if( pStream->zText[0] < 0xc0 && SyisDigit(pStream->zText[0]) ){
 		/* Number */
 		pStream->zText++;
 		pToken->nType = JSON_TK_NUM;
@@ -49601,7 +49603,7 @@ static int lhash_read_header(lhash_kv_engine *pEngine,unqlite_page *pHeader)
 	/* Initialiaze the bucket map */
 	pMap = &pEngine->sPageMap;
 	/* Fill in the structure */
-	pMap->iNum = pHeader->iPage;
+	pMap->iNum = pHeader->pgno;
 	/* Next page in the bucket map */
 	SyBigEndianUnpack64(zRaw,&pMap->iNext);
 	zRaw += 8;
@@ -49750,7 +49752,7 @@ static int lhMapWriteRecord(lhash_kv_engine *pEngine,pgno iLogic,pgno iReal)
 		}
 		/* Reflect the change  */
 		pMap->iNext = 0;
-		pMap->iNum = pPage->iPage;
+		pMap->iNum = pPage->pgno;
 		pMap->nRec = 0;
 		pMap->iPtr = 8/* Next page number */+4/* Total records in the map*/;
 		/* Link this page */
@@ -49758,12 +49760,12 @@ static int lhMapWriteRecord(lhash_kv_engine *pEngine,pgno iLogic,pgno iReal)
 		if( rc != UNQLITE_OK ){
 			return rc;
 		}
-		if( pOld->iPage == pEngine->pHeader->iPage ){
+		if( pOld->pgno == pEngine->pHeader->pgno ){
 			/* First page (Hash header) */
-			SyBigEndianPack64(&pOld->zData[4/*magic*/+4/*hash*/+8/* Free page */+8/*current split bucket*/+8/*Maximum split bucket*/],pPage->iPage);
+			SyBigEndianPack64(&pOld->zData[4/*magic*/+4/*hash*/+8/* Free page */+8/*current split bucket*/+8/*Maximum split bucket*/],pPage->pgno);
 		}else{
 			/* Link the new page */
-			SyBigEndianPack64(pOld->zData,pPage->iPage);
+			SyBigEndianPack64(pOld->zData,pPage->pgno);
 			/* Unref */
 			pEngine->pIo->xPageUnref(pOld);
 		}
@@ -49796,7 +49798,7 @@ static int lhMapWriteRecord(lhash_kv_engine *pEngine,pgno iLogic,pgno iReal)
 	if( rc == UNQLITE_OK ){
 		/* Total number of records */
 		pMap->nRec++;
-		if( pPage->iPage == pEngine->pHeader->iPage ){
+		if( pPage->pgno == pEngine->pHeader->pgno ){
 			/* Page one: Always writable */
 			SyBigEndianPack32(
 				&pPage->zData[4/*magic*/+4/*hash*/+8/* Free page */+8/*current split bucket*/+8/*Maximum split bucket*/+8/*Next map page*/],
@@ -49834,7 +49836,7 @@ static int lhPageDefragment(lhpage *pPage)
 			/* No more cells */
 			break;
 		}
-		if( pCell->pPage->pRaw->iPage == pPage->pRaw->iPage ){
+		if( pCell->pPage->pRaw->pgno == pPage->pRaw->pgno ){
 			/* Cell payload if locally stored */
 			zPayload = 0;
 			if( pCell->iOvfl == 0 ){
@@ -50063,7 +50065,7 @@ static int lhCellWriteOvflPayload(lhcell *pCell,const void *pKey,sxu32 nKeylen,.
 	}
 	pFirst = pOvfl;
 	/* Link */
-	pCell->iOvfl = pOvfl->iPage;
+	pCell->iOvfl = pOvfl->pgno;
 	/* Update the cell header */
 	SyBigEndianPack64(&pPage->pRaw->zData[pCell->iStart + 4/*Hash*/ + 4/*Key*/ + 8/*Data*/ + 2 /*Next cell*/],pCell->iOvfl);
 	/* Start the write process */
@@ -50089,7 +50091,7 @@ static int lhCellWriteOvflPayload(lhcell *pCell,const void *pKey,sxu32 nKeylen,.
 				return rc;
 			}
 			/* Link */
-			SyBigEndianPack64(pOvfl->zData,pNew->iPage);
+			SyBigEndianPack64(pOvfl->zData,pNew->pgno);
 			pEngine->pIo->xPageUnref(pOvfl);
 			SyBigEndianPack64(pNew->zData,0); /* Next overflow page on the chain */
 			pOvfl = pNew;
@@ -50108,7 +50110,7 @@ static int lhCellWriteOvflPayload(lhcell *pCell,const void *pKey,sxu32 nKeylen,.
 	}
 	rc = UNQLITE_OK;
 	va_start(ap,nKeylen);
-	pCell->iDataPage = pNew->iPage;
+	pCell->iDataPage = pNew->pgno;
 	pCell->iDataOfft = (sxu16)(zRaw-pNew->zData);
 	/* Write the data page and its offset */
 	SyBigEndianPack64(&pFirst->zData[8/*Next ovfl*/],pCell->iDataPage);
@@ -50144,7 +50146,7 @@ static int lhCellWriteOvflPayload(lhcell *pCell,const void *pKey,sxu32 nKeylen,.
 					return rc;
 				}
 				/* Link */
-				SyBigEndianPack64(pOvfl->zData,pNew->iPage);
+				SyBigEndianPack64(pOvfl->zData,pNew->pgno);
 				pEngine->pIo->xPageUnref(pOvfl);
 				SyBigEndianPack64(pNew->zData,0); /* Next overflow page on the chain */
 				pOvfl = pNew;
@@ -50183,7 +50185,7 @@ static int lhRestorePage(lhash_kv_engine *pEngine,unqlite_page *pPage)
 	}
 	/* Link to the list of free page */
 	SyBigEndianPack64(pPage->zData,pEngine->nFreeList);
-	pEngine->nFreeList = pPage->iPage;
+	pEngine->nFreeList = pPage->pgno;
 	SyBigEndianPack64(&pEngine->pHeader->zData[4/*Magic*/+4/*Hash*/],pEngine->nFreeList);
 	/* All done */
 	return UNQLITE_OK;
@@ -50453,7 +50455,7 @@ static int lhRecordOverwrite(
 				return rc;
 			}
 			/* Link */
-			SyBigEndianPack64(pOvfl->zData,pNew->iPage);
+			SyBigEndianPack64(pOvfl->zData,pNew->pgno);
 			pEngine->pIo->xPageUnref(pOvfl);
 			SyBigEndianPack64(pNew->zData,0); /* Next overflow page on the chain */
 			pOvfl = pNew;
@@ -50614,7 +50616,7 @@ static int lhRecordAppend(
 				return rc;
 			}
 			/* Link */
-			SyBigEndianPack64(pOvfl->zData,pNew->iPage);
+			SyBigEndianPack64(pOvfl->zData,pNew->pgno);
 			pEngine->pIo->xPageUnref(pOvfl);
 			SyBigEndianPack64(pNew->zData,0); /* Next overflow page on the chain */
 			pOvfl = pNew;
@@ -50825,8 +50827,8 @@ static int lhFindSlavePage(lhpage *pPage,sxu64 nAmount,sxu16 *pOfft,lhpage **ppS
 		goto fail;
 	}
 	/* Reflect in the page header */
-	SyBigEndianPack64(&pSlave->pRaw->zData[2/*Cell offset*/+2/*Free block offset*/],pRaw->iPage);
-	pSlave->sHdr.iSlave = pRaw->iPage;
+	SyBigEndianPack64(&pSlave->pRaw->zData[2/*Cell offset*/+2/*Free block offset*/],pRaw->pgno);
+	pSlave->sHdr.iSlave = pRaw->pgno;
 	/* All done */
 	*ppSlave = pNew;
 	return UNQLITE_OK;
@@ -51005,12 +51007,12 @@ static int lhSplit(lhpage *pTarget,int *pRetry)
 	/* Install and write the logical map record */
 	rc = lhMapWriteRecord(pEngine,
 		pEngine->split_bucket + pEngine->max_split_bucket,
-		pRaw->iPage
+		pRaw->pgno
 		);
 	if( rc != UNQLITE_OK ){
 		goto fail;
 	}
-	if( pTarget->pRaw->iPage == pOld->pRaw->iPage ){
+	if( pTarget->pRaw->pgno == pOld->pRaw->pgno ){
 		*pRetry = 1;
 	}
 	/* Perform the split */
@@ -51133,7 +51135,7 @@ retry:
 		rc = lhStoreCell(pPage,pKey,nKeyLen,pData,nDataLen,nHash,1);
 		if( rc == UNQLITE_OK ){
 			/* Install and write the logical map record */
-			rc = lhMapWriteRecord(pEngine,iBucket,pRaw->iPage);
+			rc = lhMapWriteRecord(pEngine,iBucket,pRaw->pgno);
 		}
 		pEngine->pIo->xPageUnref(pRaw);
 		return rc;
@@ -51221,7 +51223,7 @@ static int lhash_write_header(lhash_kv_engine *pEngine,unqlite_page *pHeader)
 	/* Initialize the bucket map */
 	pMap = &pEngine->sPageMap;
 	/* Fill in the structure */
-	pMap->iNum = pHeader->iPage;
+	pMap->iNum = pHeader->pgno;
 	/* Next page in the bucket map */
 	SyBigEndianPack64(zRaw,0);
 	zRaw += 8;
@@ -52686,6 +52688,9 @@ struct unixFile {
   int fileFlags;                      /* Miscellanous flags */
   const char *zPath;                  /* Name of the file */
   unsigned fsFlags;                   /* cached details from statfs() */
+#if defined(UNQLITE_LOCK_BY_SEM)
+  sem_t *f_sem;                       /* named semaphore as simple filelock */
+#endif
 };
 /*
 ** The following macros define bits in unixFile.fileFlags
@@ -53068,7 +53073,10 @@ static int unixCheckReservedLock(unqlite_file *id, int *pResOut){
   int reserved = 0;
   unixFile *pFile = (unixFile*)id;
 
- 
+#if defined(UNQLITE_LOCK_BY_SEM)
+  rc = sem_getvalue(pFile->f_sem, &reserved);
+  *pResOut = !reserved;
+#else
   unixEnterMutex(); /* Because pFile->pInode is shared across threads */
 
   /* Check if a thread in this process holds such a lock */
@@ -53094,8 +53102,8 @@ static int unixCheckReservedLock(unqlite_file *id, int *pResOut){
   }
   
   unixLeaveMutex();
- 
   *pResOut = reserved;
+#endif
   return rc;
 }
 /*
@@ -53163,6 +53171,10 @@ static int unixLock(unqlite_file *id, int eFileLock){
   */
   int rc = UNQLITE_OK;
   unixFile *pFile = (unixFile*)id;
+#if defined(UNQLITE_LOCK_BY_SEM)
+  sem_wait(pFile->f_sem);
+  pFile->eFileLock = eFileLock;
+#else
   unixInodeInfo *pInode = pFile->pInode;
   struct flock lock;
   int s = 0;
@@ -53297,6 +53309,7 @@ static int unixLock(unqlite_file *id, int eFileLock){
   }
 end_lock:
   unixLeaveMutex();
+#endif
   return rc;
 }
 /*
@@ -53473,7 +53486,13 @@ end_unlock:
 ** the requested locking level, this routine is a no-op.
 */
 static int unixUnlock(unqlite_file *id, int eFileLock){
+#if defined(UNQLITE_LOCK_BY_SEM)
+  if (eFileLock == NO_LOCK)
+  	return sem_post(((unixFile*)id)->f_sem);
+  return 0;
+#else
   return _posixUnlock(id, eFileLock, 0);
+#endif
 }
 /*
 ** This function performs the parts of the "close file" operation 
@@ -53524,6 +53543,9 @@ static int unixClose(unqlite_file *id){
       setPendingFd(pFile);
     }
     releaseInodeInfo(pFile);
+#if defined(UNQLITE_LOCK_BY_SEM)
+	sem_close(pFile->f_sem);
+#endif
     rc = closeUnixFile(id);
     unixLeaveMutex();
   }
@@ -53944,6 +53966,9 @@ static int fillInUnixFile(
     if( h>=0 ) close(h);
   }else{
     pNew->pMethod = pLockingStyle;
+#if defined(UNQLITE_LOCK_BY_SEM)
+	pNew->f_sem = sem_open(zFilename, O_CREAT, 0, 1);
+#endif
   }
   return rc;
 }
@@ -55434,9 +55459,6 @@ UNQLITE_PRIVATE const unqlite_vfs * unqliteExportBuiltinVfs(void)
 **  
 **
 */
-#ifndef NULL
-#define NULL 0
-#endif
 #define PAGER_OPEN                  0
 #define PAGER_READER                1
 #define PAGER_WRITER_LOCKED         2
@@ -56405,7 +56427,11 @@ static int pager_unlock_db(Pager *pPager, int eLock)
 */
 static int pager_lock_db(Pager *pPager, int eLock){
   int rc = UNQLITE_OK;
+#if defined(UNQLITE_LOCK_BY_SEM)
+  if (pPager->iLock == NO_LOCK){
+#else
   if( pPager->iLock < eLock || pPager->iLock == NO_LOCK ){
+#endif
     rc = unqliteOsLock(pPager->pfd, eLock);
     if( rc==UNQLITE_OK ){
       pPager->iLock = eLock;
