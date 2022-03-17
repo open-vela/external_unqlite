@@ -43,6 +43,6 @@ CFLAGS += -DJX9_ENABLE_MATH_FUNC
 endif
 
 CFLAGS += -Wno-unused-function -Wno-misleading-indentation
-CFLAGS += -Wno-shadow -Wno-unused-but-set-variable
+CFLAGS += -Wno-shadow
 
 include $(APPDIR)/Application.mk
