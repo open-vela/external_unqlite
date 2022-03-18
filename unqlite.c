@@ -4895,7 +4895,7 @@ int unqlite_value_string_format(unqlite_value *pVal, const char *zFormat,...)
 	va_start(ap, zFormat);
 	rc = SyBlobFormatAp(&pVal->sBlob, zFormat, ap);
 	va_end(ap);
-	return UNQLITE_OK;
+	return rc;
 }
 /*
  * [CAPIREF: unqlite_value_reset_string_cursor()]
@@ -8564,7 +8564,7 @@ JX9_PRIVATE int jx9_value_string_format(jx9_value *pVal, const char *zFormat, ..
 	va_start(ap, zFormat);
 	rc = SyBlobFormatAp(&pVal->sBlob, zFormat, ap);
 	va_end(ap);
-	return JX9_OK;
+	return rc;
 }
 /*
  * [CAPIREF: jx9_value_reset_string_cursor()]
@@ -12254,7 +12254,6 @@ JX9_PRIVATE sxi32 jx9InputFormat(
 	jx9_value *pArg;         /* Current processed argument */
 	jx9_int64 iVal;
 	int precision;           /* Precision of the current field */
-	char *zExtra;  
 	int c, rc, n;
 	int length;              /* Length of the field */
 	int prefix;
@@ -12363,7 +12362,6 @@ JX9_PRIVATE sxi32 jx9InputFormat(
 		}
 		zBuf = zWorker; /* Point to the working buffer */
 		length = 0;
-		zExtra = 0;
 		 /*
 		  ** At this point, variables are initialized as follows:
 		  **
@@ -18413,9 +18411,7 @@ static sxi32 jx9CompileBreak(jx9_gen_state *pGen)
 {
 	GenBlock *pLoop; /* Target loop */
 	sxi32 iLevel;    /* How many nesting loop to skip */
-	sxu32 nLine;
 	sxi32 rc;
-	nLine = pGen->pIn->nLine;
 	iLevel = 0;
 	/* Jump the 'break' keyword */
 	pGen->pIn++;
@@ -19876,13 +19872,12 @@ static sxi32 GenStateProcessArgValue(jx9_gen_state *pGen, jx9_vm_func_arg *pArg,
 static sxi32 GenStateCollectFuncArgs(jx9_vm_func *pFunc, jx9_gen_state *pGen, SyToken *pEnd)
 {
 	jx9_vm_func_arg sArg; /* Current processed argument */
-	SyToken *pCur, *pIn;  /* Token stream */
+	SyToken *pIn;         /* Token stream */
 	SyBlob sSig;         /* Function signature */
 	char *zDup;          /* Copy of argument name */
 	sxi32 rc;
 
 	pIn = pGen->pIn;
-	pCur = 0;
 	SyBlobInit(&sSig, &pGen->pVm->sAllocator);
 	/* Process arguments one after one */
 	for(;;){
@@ -29176,7 +29171,6 @@ static const SyFmtInfo aFmt[] = {
   char prefix;             /* Prefix character."+" or "-" or " " or '\0'.*/
   sxu8 errorflag = 0;      /* True if an error is encountered */
   sxu8 xtype;              /* Conversion paradigm */
-  char *zExtra;    
   static char spaces[] = "                                                  ";
 #define etSPACESIZE ((int)sizeof(spaces)-1)
 #ifndef SX_OMIT_FLOATINGPOINT
@@ -29281,7 +29275,6 @@ static const SyFmtInfo aFmt[] = {
         break;
       }
     }
-    zExtra = 0;
 
     /*
     ** At this point, variables are initialized as follows:
@@ -46264,7 +46257,7 @@ static int vm_builtin_get_defined_constants(jx9_context *pCtx, int nArg, jx9_val
  */
 JX9_PRIVATE sxu32 jx9VmRandomNum(jx9_vm *pVm)
 {
-	sxu32 iNum;
+	sxu32 iNum = 0;
 	SyRandomness(&pVm->sPrng, (void *)&iNum, sizeof(sxu32));
 	return iNum;
 }
@@ -57954,7 +57947,7 @@ UNQLITE_PRIVATE void unqlitePagerRandomString(Pager *pPager,char *zBuf,sxu32 nLe
  */
 UNQLITE_PRIVATE sxu32 unqlitePagerRandomNum(Pager *pPager)
 {
-	sxu32 iNum;
+	sxu32 iNum = 0;
 	SyRandomness(&pPager->sPrng,(void *)&iNum,sizeof(iNum));
 	return iNum;
 }
