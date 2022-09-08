@@ -53096,6 +53096,7 @@ static int unixCheckReservedLock(unqlite_file *id, int *pResOut){
   }
   
   unixLeaveMutex();
+ 
   *pResOut = reserved;
 #endif
   return rc;
