@@ -49652,7 +49652,7 @@ static int lhRecordLookup(
 	sxu32 nHash;
 	int rc;
 	/* Acquire the first page (hash Header) so that everything gets loaded autmatically */
-	rc = pEngine->pIo->xGet(pEngine->pIo->pHandle,1,0);
+	rc = pEngine->pIo->xGet(pEngine->pIo->pHandle,1,&pEngine->pHeader);
 	if( rc != UNQLITE_OK ){
 		return rc;
 	}
@@ -51092,7 +51092,7 @@ static int lh_record_insert(
 	int rc;
 
 	/* Acquire the first page (DB hash Header) so that everything gets loaded automatically */
-	rc = pEngine->pIo->xGet(pEngine->pIo->pHandle,1,0);
+	rc = pEngine->pIo->xGet(pEngine->pIo->pHandle,1,&pEngine->pHeader);
 	if( rc != UNQLITE_OK ){
 		return rc;
 	}
@@ -51528,7 +51528,7 @@ static int lhCursorFirst(unqlite_kv_cursor *pCursor)
 	int rc;
 	if( pCur->is_first ){
 		/* Read the database header first */
-		rc = pEngine->pIo->xGet(pEngine->pIo->pHandle,1,0);
+		rc = pEngine->pIo->xGet(pEngine->pIo->pHandle,1,&pEngine->pHeader);
 		if( rc != UNQLITE_OK ){
 			return rc;
 		}
@@ -51550,7 +51550,7 @@ static int lhCursorLast(unqlite_kv_cursor *pCursor)
 	int rc;
 	if( pCur->is_first ){
 		/* Read the database header first */
-		rc = pEngine->pIo->xGet(pEngine->pIo->pHandle,1,0);
+		rc = pEngine->pIo->xGet(pEngine->pIo->pHandle,1,&pEngine->pHeader);
 		if( rc != UNQLITE_OK ){
 			return rc;
 		}
