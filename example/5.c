@@ -153,34 +153,23 @@ int date_func(
 	int argc,          /* Total number of arguments passed to the function */
 	unqlite_value **argv   /* Array of function arguments*/
 	){
-        struct tm *pNow;
-#if defined(_MSC_VER) || defined(__MINGW32__)
-        errno_t err;
-        __time64_t long_time;
-        struct tm newtime;
-        _time64( &long_time );
-        err = _localtime64_s(&newtime, &long_time);
-        if (err != 0) return UNQLITE_INVALID;
-        pNow = &newtime;
-#else
-        time_t tt;
-        /* Get the current time */
-        time(&tt);
+		time_t tt;
+		struct tm *pNow;
+		/* Get the current time */
+		time(&tt);
 		pNow = localtime(&tt);
-#endif
-        /*
-         * Return the current date.
-         */
-        unqlite_result_string_format(pCtx,
-                                     "%04d-%02d-%02d %02d:%02d:%02d", /* printf() style format */
-                                     pNow->tm_year + 1900, /* Year */
-                                     pNow->tm_mday,        /* Day of the month */
-                                     pNow->tm_mon + 1,     /* Month number */
-                                     pNow->tm_hour, /* Hour */
-                                     pNow->tm_min,  /* Minutes */
-                                     pNow->tm_sec   /* Seconds */
-        );
-
+		/* 
+		 * Return the current date.
+		 */
+		unqlite_result_string_format(pCtx, 
+			"%04d-%02d-%02d %02d:%02d:%02d", /* printf() style format */
+			pNow->tm_year + 1900, /* Year */
+			pNow->tm_mday,        /* Day of the month */
+			pNow->tm_mon + 1,     /* Month number */
+			pNow->tm_hour, /* Hour */
+			pNow->tm_min,  /* Minutes */
+			pNow->tm_sec   /* Seconds */
+			);
 		/* All done */
 		return UNQLITE_OK;
 }
@@ -257,21 +246,11 @@ int array_time_func(unqlite_context *pCtx, int argc, unqlite_value **argv)
 {
 	unqlite_value *pArray;    /* Our JSON Array */
 	unqlite_value *pValue;    /* Array entries value */
+	time_t tt;
 	struct tm *pNow;
 	/* Get the current time first */
-#if defined(_MSC_VER) || defined(__MINGW32__)
-    errno_t err;
-    __time64_t long_time;
-    struct tm newtime;
-    _time64( &long_time );
-    err = _localtime64_s(&newtime, &long_time);
-    if (err != 0) return UNQLITE_INVALID;
-    pNow = &newtime;
-#else
-    time_t tt;
-    time(&tt);
+	time(&tt);
 	pNow = localtime(&tt);
-#endif
 	/* Create a new array */
 	pArray = unqlite_context_new_array(pCtx);
 	/* Create a worker scalar value */
@@ -346,21 +325,11 @@ int object_date_func(unqlite_context *pCtx, int argc /* unused */, unqlite_value
 {
 	unqlite_value *pObject;    /* Our JSON object */
 	unqlite_value *pValue;    /* Objecr entries value */
+	time_t tt;
 	struct tm *pNow;
 	/* Get the current time first */
-#if defined(_MSC_VER) || defined(__MINGW32__)
-    errno_t err;
-    __time64_t long_time;
-    struct tm newtime;
-    _time64( &long_time );
-    err = _localtime64_s(&newtime, &long_time);
-    if (err != 0) return UNQLITE_INVALID;
-    pNow = &newtime;
-#else
-    time_t tt;
-    time(&tt);
-    pNow = localtime(&tt);
-#endif
+	time(&tt);
+	pNow = localtime(&tt);
 	/* Create a new JSON object */
 	pObject = unqlite_context_new_array(pCtx);
 	/* Create a worker scalar value */

@@ -937,15 +937,4 @@ UNQLITE_PRIVATE const unqlite_vfs * unqliteExportBuiltinVfs(void)
 	};
 	return &sWinvfs;
 }
-
-void * unqlite_malloc(unsigned int nByte)
-{
-    return malloc(nByte);
-}
-
-void unqlite_free(void *p)
-{
-    free(p);
-}
-
 #endif /* __WINNT__ */

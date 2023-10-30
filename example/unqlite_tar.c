@@ -46,13 +46,6 @@
   */
 #include <stdio.h>  /* puts() */
 #include <stdlib.h> /* exit() */
-
-#if defined(_MSC_VER) || defined(__MINGW32__)
-#define NUM_FORMAT "l"
-#else
-#define NUM_FORMAT ""
-#endif
-
   /* Make sure this header file is available.*/
 #include "unqlite.h"
 /*
@@ -201,7 +194,7 @@ int main(int argc, char *argv[])
 
 			/* Extract the data size */
 			unqlite_kv_cursor_data(pCur, 0, &nDataLen);
-			printf(":\t %l"NUM_FORMAT"d Bytes\n", nDataLen);
+			printf(":\t %ld Bytes\n", nDataLen);
 			/* unqlite_kv_cursor_data_callback(pCur,DataConsumerCallback,0); */
 
 			/* Point to the next entry */
