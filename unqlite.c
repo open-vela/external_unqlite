@@ -4312,6 +4312,9 @@ UNQLITE_PRIVATE const SyMemBackend * unqliteExportMemBackend(void)
  * [CAPIREF: unqlite_open()]
  * Please refer to the official documentation for function purpose and expected parameters.
  */
+#if defined(UNQLITE_LOCK_BY_SEM)
+#include<semaphore.h>
+#endif
 int unqlite_open(unqlite **ppDB,const char *zFilename,unsigned int iMode)
 {
 	unqlite *pHandle;
@@ -4892,7 +4895,7 @@ int unqlite_value_string_format(unqlite_value *pVal, const char *zFormat,...)
 	va_start(ap, zFormat);
 	rc = SyBlobFormatAp(&pVal->sBlob, zFormat, ap);
 	va_end(ap);
-	return UNQLITE_OK;
+	return rc;
 }
 /*
  * [CAPIREF: unqlite_value_reset_string_cursor()]
@@ -8561,7 +8564,7 @@ JX9_PRIVATE int jx9_value_string_format(jx9_value *pVal, const char *zFormat, ..
 	va_start(ap, zFormat);
 	rc = SyBlobFormatAp(&pVal->sBlob, zFormat, ap);
 	va_end(ap);
-	return JX9_OK;
+	return rc;
 }
 /*
  * [CAPIREF: jx9_value_reset_string_cursor()]
@@ -12251,7 +12254,6 @@ JX9_PRIVATE sxi32 jx9InputFormat(
 	jx9_value *pArg;         /* Current processed argument */
 	jx9_int64 iVal;
 	int precision;           /* Precision of the current field */
-	char *zExtra;  
 	int c, rc, n;
 	int length;              /* Length of the field */
 	int prefix;
@@ -12360,7 +12362,6 @@ JX9_PRIVATE sxi32 jx9InputFormat(
 		}
 		zBuf = zWorker; /* Point to the working buffer */
 		length = 0;
-		zExtra = 0;
 		 /*
 		  ** At this point, variables are initialized as follows:
 		  **
@@ -18410,9 +18411,7 @@ static sxi32 jx9CompileBreak(jx9_gen_state *pGen)
 {
 	GenBlock *pLoop; /* Target loop */
 	sxi32 iLevel;    /* How many nesting loop to skip */
-	sxu32 nLine;
 	sxi32 rc;
-	nLine = pGen->pIn->nLine;
 	iLevel = 0;
 	/* Jump the 'break' keyword */
 	pGen->pIn++;
@@ -19873,13 +19872,12 @@ static sxi32 GenStateProcessArgValue(jx9_gen_state *pGen, jx9_vm_func_arg *pArg,
 static sxi32 GenStateCollectFuncArgs(jx9_vm_func *pFunc, jx9_gen_state *pGen, SyToken *pEnd)
 {
 	jx9_vm_func_arg sArg; /* Current processed argument */
-	SyToken *pCur, *pIn;  /* Token stream */
+	SyToken *pIn;         /* Token stream */
 	SyBlob sSig;         /* Function signature */
 	char *zDup;          /* Copy of argument name */
 	sxi32 rc;
 
 	pIn = pGen->pIn;
-	pCur = 0;
 	SyBlobInit(&sSig, &pGen->pVm->sAllocator);
 	/* Process arguments one after one */
 	for(;;){
@@ -26992,7 +26990,7 @@ JX9_PRIVATE sxi32 SyByteListFind(const char *zSrc, sxu32 nLen, const char *zList
 	}	
 	return SXERR_NOTFOUND; 
 }
-#if !defined(JX9_DISABLE_BUILTIN_FUNC) || defined(__APPLE__)
+#ifndef JX9_DISABLE_BUILTIN_FUNC
 JX9_PRIVATE sxi32 SyStrncmp(const char *zLeft, const char *zRight, sxu32 nLen)
 {
 	const unsigned char *zP = (const unsigned char *)zLeft;
@@ -29173,7 +29171,6 @@ static const SyFmtInfo aFmt[] = {
   char prefix;             /* Prefix character."+" or "-" or " " or '\0'.*/
   sxu8 errorflag = 0;      /* True if an error is encountered */
   sxu8 xtype;              /* Conversion paradigm */
-  char *zExtra;    
   static char spaces[] = "                                                  ";
 #define etSPACESIZE ((int)sizeof(spaces)-1)
 #ifndef SX_OMIT_FLOATINGPOINT
@@ -29278,7 +29275,6 @@ static const SyFmtInfo aFmt[] = {
         break;
       }
     }
-    zExtra = 0;
 
     /*
     ** At this point, variables are initialized as follows:
@@ -30306,7 +30302,9 @@ static sxi32 SyOSUtilRandomSeed(void *pBuf, sxu32 nLen, void *pUnused)
 	pid = getpid();
 	SyMemcpy((const void *)&pid, zBuf, SXMIN(nLen, sizeof(pid_t)));
 	if( &zBuf[nLen] - &zBuf[sizeof(pid_t)] >= (int)sizeof(struct timeval)  ){
-		gettimeofday((struct timeval *)&zBuf[sizeof(pid_t)], 0);
+		struct timeval tm;
+		gettimeofday(&tm, 0);
+		SyMemcpy(&tm, &zBuf[sizeof(pid_t)], sizeof(struct timeval));
 	}
 #else
 	/* Fill with uninitialized data */
@@ -46259,7 +46257,7 @@ static int vm_builtin_get_defined_constants(jx9_context *pCtx, int nArg, jx9_val
  */
 JX9_PRIVATE sxu32 jx9VmRandomNum(jx9_vm *pVm)
 {
-	sxu32 iNum;
+	sxu32 iNum = 0;
 	SyRandomness(&pVm->sPrng, (void *)&iNum, sizeof(sxu32));
 	return iNum;
 }
@@ -52684,6 +52682,9 @@ struct unixFile {
   int fileFlags;                      /* Miscellanous flags */
   const char *zPath;                  /* Name of the file */
   unsigned fsFlags;                   /* cached details from statfs() */
+#if defined(UNQLITE_LOCK_BY_SEM)
+  sem_t *f_sem;                       /* named semaphore as simple filelock */
+#endif
 };
 /*
 ** The following macros define bits in unixFile.fileFlags
@@ -53066,7 +53067,10 @@ static int unixCheckReservedLock(unqlite_file *id, int *pResOut){
   int reserved = 0;
   unixFile *pFile = (unixFile*)id;
 
- 
+#if defined(UNQLITE_LOCK_BY_SEM)
+  rc = sem_getvalue(pFile->f_sem, &reserved);
+  *pResOut = !reserved;
+#else
   unixEnterMutex(); /* Because pFile->pInode is shared across threads */
 
   /* Check if a thread in this process holds such a lock */
@@ -53094,6 +53098,7 @@ static int unixCheckReservedLock(unqlite_file *id, int *pResOut){
   unixLeaveMutex();
  
   *pResOut = reserved;
+#endif
   return rc;
 }
 /*
@@ -53161,6 +53166,10 @@ static int unixLock(unqlite_file *id, int eFileLock){
   */
   int rc = UNQLITE_OK;
   unixFile *pFile = (unixFile*)id;
+#if defined(UNQLITE_LOCK_BY_SEM)
+  sem_wait(pFile->f_sem);
+  pFile->eFileLock = eFileLock;
+#else
   unixInodeInfo *pInode = pFile->pInode;
   struct flock lock;
   int s = 0;
@@ -53295,6 +53304,7 @@ static int unixLock(unqlite_file *id, int eFileLock){
   }
 end_lock:
   unixLeaveMutex();
+#endif
   return rc;
 }
 /*
@@ -53471,7 +53481,13 @@ end_unlock:
 ** the requested locking level, this routine is a no-op.
 */
 static int unixUnlock(unqlite_file *id, int eFileLock){
+#if defined(UNQLITE_LOCK_BY_SEM)
+  if (eFileLock == NO_LOCK)
+  	return sem_post(((unixFile*)id)->f_sem);
+  return 0;
+#else
   return _posixUnlock(id, eFileLock, 0);
+#endif
 }
 /*
 ** This function performs the parts of the "close file" operation 
@@ -53522,6 +53538,9 @@ static int unixClose(unqlite_file *id){
       setPendingFd(pFile);
     }
     releaseInodeInfo(pFile);
+#if defined(UNQLITE_LOCK_BY_SEM)
+	sem_close(pFile->f_sem);
+#endif
     rc = closeUnixFile(id);
     unixLeaveMutex();
   }
@@ -53942,6 +53961,9 @@ static int fillInUnixFile(
     if( h>=0 ) close(h);
   }else{
     pNew->pMethod = pLockingStyle;
+#if defined(UNQLITE_LOCK_BY_SEM)
+	pNew->f_sem = sem_open(zFilename, O_CREAT, 0, 1);
+#endif
   }
   return rc;
 }
@@ -55295,16 +55317,6 @@ UNQLITE_PRIVATE const unqlite_vfs * unqliteExportBuiltinVfs(void)
 	};
 	return &sWinvfs;
 }
-
-void * unqlite_malloc(unsigned int nByte)
-{
-    return malloc(nByte);
-}
-
-void unqlite_free(void *p)
-{
-  free(p);
-}
 #endif /* __WINNT__ */
 /*
  * ----------------------------------------------------------
@@ -56413,7 +56425,11 @@ static int pager_unlock_db(Pager *pPager, int eLock)
 */
 static int pager_lock_db(Pager *pPager, int eLock){
   int rc = UNQLITE_OK;
+#if defined(UNQLITE_LOCK_BY_SEM)
+  if (pPager->iLock == NO_LOCK){
+#else
   if( pPager->iLock < eLock || pPager->iLock == NO_LOCK ){
+#endif
     rc = unqliteOsLock(pPager->pfd, eLock);
     if( rc==UNQLITE_OK ){
       pPager->iLock = eLock;
@@ -57936,7 +57952,7 @@ UNQLITE_PRIVATE void unqlitePagerRandomString(Pager *pPager,char *zBuf,sxu32 nLe
  */
 UNQLITE_PRIVATE sxu32 unqlitePagerRandomNum(Pager *pPager)
 {
-	sxu32 iNum;
+	sxu32 iNum = 0;
 	SyRandomness(&pPager->sPrng,(void *)&iNum,sizeof(iNum));
 	return iNum;
 }
