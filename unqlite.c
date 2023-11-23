@@ -4312,9 +4312,6 @@ UNQLITE_PRIVATE const SyMemBackend * unqliteExportMemBackend(void)
  * [CAPIREF: unqlite_open()]
  * Please refer to the official documentation for function purpose and expected parameters.
  */
-#if defined(UNQLITE_LOCK_BY_SEM)
-#include<semaphore.h>
-#endif
 int unqlite_open(unqlite **ppDB,const char *zFilename,unsigned int iMode)
 {
 	unqlite *pHandle;
@@ -52682,9 +52679,6 @@ struct unixFile {
   int fileFlags;                      /* Miscellanous flags */
   const char *zPath;                  /* Name of the file */
   unsigned fsFlags;                   /* cached details from statfs() */
-#if defined(UNQLITE_LOCK_BY_SEM)
-  sem_t *f_sem;                       /* named semaphore as simple filelock */
-#endif
 };
 /*
 ** The following macros define bits in unixFile.fileFlags
@@ -53067,10 +53061,7 @@ static int unixCheckReservedLock(unqlite_file *id, int *pResOut){
   int reserved = 0;
   unixFile *pFile = (unixFile*)id;
 
-#if defined(UNQLITE_LOCK_BY_SEM)
-  rc = sem_getvalue(pFile->f_sem, &reserved);
-  *pResOut = !reserved;
-#else
+ 
   unixEnterMutex(); /* Because pFile->pInode is shared across threads */
 
   /* Check if a thread in this process holds such a lock */
@@ -53098,7 +53089,6 @@ static int unixCheckReservedLock(unqlite_file *id, int *pResOut){
   unixLeaveMutex();
  
   *pResOut = reserved;
-#endif
   return rc;
 }
 /*
@@ -53166,10 +53156,6 @@ static int unixLock(unqlite_file *id, int eFileLock){
   */
   int rc = UNQLITE_OK;
   unixFile *pFile = (unixFile*)id;
-#if defined(UNQLITE_LOCK_BY_SEM)
-  sem_wait(pFile->f_sem);
-  pFile->eFileLock = eFileLock;
-#else
   unixInodeInfo *pInode = pFile->pInode;
   struct flock lock;
   int s = 0;
@@ -53304,7 +53290,6 @@ static int unixLock(unqlite_file *id, int eFileLock){
   }
 end_lock:
   unixLeaveMutex();
-#endif
   return rc;
 }
 /*
@@ -53481,13 +53466,7 @@ end_unlock:
 ** the requested locking level, this routine is a no-op.
 */
 static int unixUnlock(unqlite_file *id, int eFileLock){
-#if defined(UNQLITE_LOCK_BY_SEM)
-  if (eFileLock == NO_LOCK)
-  	return sem_post(((unixFile*)id)->f_sem);
-  return 0;
-#else
   return _posixUnlock(id, eFileLock, 0);
-#endif
 }
 /*
 ** This function performs the parts of the "close file" operation 
@@ -53538,9 +53517,6 @@ static int unixClose(unqlite_file *id){
       setPendingFd(pFile);
     }
     releaseInodeInfo(pFile);
-#if defined(UNQLITE_LOCK_BY_SEM)
-	sem_close(pFile->f_sem);
-#endif
     rc = closeUnixFile(id);
     unixLeaveMutex();
   }
@@ -53961,9 +53937,6 @@ static int fillInUnixFile(
     if( h>=0 ) close(h);
   }else{
     pNew->pMethod = pLockingStyle;
-#if defined(UNQLITE_LOCK_BY_SEM)
-	pNew->f_sem = sem_open(zFilename, O_CREAT, 0, 1);
-#endif
   }
   return rc;
 }
@@ -56435,11 +56408,7 @@ static int pager_unlock_db(Pager *pPager, int eLock)
 */
 static int pager_lock_db(Pager *pPager, int eLock){
   int rc = UNQLITE_OK;
-#if defined(UNQLITE_LOCK_BY_SEM)
-  if (pPager->iLock == NO_LOCK){
-#else
   if( pPager->iLock < eLock || pPager->iLock == NO_LOCK ){
-#endif
     rc = unqliteOsLock(pPager->pfd, eLock);
     if( rc==UNQLITE_OK ){
       pPager->iLock = eLock;
