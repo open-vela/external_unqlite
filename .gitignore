@@ -7,3 +7,10 @@ Makefile
 # Binary
 libunqlite.a
 *.o
+
+# IDEs
+.idea
+.vscode
+
+# Build
+*build*
