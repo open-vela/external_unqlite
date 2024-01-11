@@ -27059,6 +27059,11 @@ JX9_PRIVATE void SyZero(void *pSrc, sxu32 nSize)
 	}
 #endif
 	zEnd = &zSrc[nSize];
+	while (nSize >= 4) {
+		*(sxu32 *)zSrc = 0;
+		zSrc += 4;
+		nSize -= 4;
+	}
 	for(;;){
 		if( zSrc >= zEnd ){break;} zSrc[0] = 0; zSrc++;
 		if( zSrc >= zEnd ){break;} zSrc[0] = 0; zSrc++;
