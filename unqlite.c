@@ -27091,8 +27091,8 @@ JX9_PRIVATE sxu32 SyMemcpy(const void *pSrc, void *pDest, sxu32 nLen)
 }
 static void * MemOSAlloc(sxu32 nBytes)
 {
-	sxu32 *pChunk;
-	pChunk = (sxu32 *)SyOSHeapAlloc(nBytes + sizeof(sxu32));
+	size_t *pChunk;
+	pChunk = (size_t *)SyOSHeapAlloc(nBytes + sizeof(size_t));
 	if( pChunk == 0 ){
 		return 0;
 	}
@@ -27101,13 +27101,13 @@ static void * MemOSAlloc(sxu32 nBytes)
 }
 static void * MemOSRealloc(void *pOld, sxu32 nBytes)
 {
-	sxu32 *pOldChunk;
-	sxu32 *pChunk;
-	pOldChunk = (sxu32 *)(((char *)pOld)-sizeof(sxu32));
+	size_t *pOldChunk;
+	size_t *pChunk;
+	pOldChunk = (size_t *)(((char *)pOld)-sizeof(size_t));
 	if( pOldChunk[0] >= nBytes ){
 		return pOld;
 	}
-	pChunk = (sxu32 *)SyOSHeapRealloc(pOldChunk, nBytes + sizeof(sxu32));
+	pChunk = (size_t *)SyOSHeapRealloc(pOldChunk, nBytes + sizeof(size_t));
 	if( pChunk == 0 ){
 		return 0;
 	}
@@ -27117,13 +27117,13 @@ static void * MemOSRealloc(void *pOld, sxu32 nBytes)
 static void MemOSFree(void *pBlock)
 {
 	void *pChunk;
-	pChunk = (void *)(((char *)pBlock)-sizeof(sxu32));
+	pChunk = (void *)(((char *)pBlock)-sizeof(size_t));
 	SyOSHeapFree(pChunk);
 }
 static sxu32 MemOSChunkSize(void *pBlock)
 {
-	sxu32 *pChunk;
-	pChunk = (sxu32 *)(((char *)pBlock)-sizeof(sxu32));
+	size_t *pChunk;
+	pChunk = (size_t *)(((char *)pBlock)-sizeof(size_t));
 	return pChunk[0];
 }
 /* Export OS allocation methods */
