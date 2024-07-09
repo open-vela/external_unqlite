@@ -52625,13 +52625,14 @@ UNQLITE_PRIVATE int unqliteOsAccess(
 #include <time.h>
 #include <sys/time.h>
 #include <errno.h>
-#if defined(__APPLE__) 
+#if defined(__APPLE__)
 # include <sys/mount.h>
 #endif
 
 #ifdef __NuttX__
 # include <nuttx/fs/ioctl.h>
 # include <sys/ioctl.h>
+# include <nuttx/tls.h>
 #endif
 /*
 ** Allowed values of unixFile.fsFlags
@@ -52911,7 +52912,33 @@ struct unixInodeInfo {
   unixInodeInfo *pPrev;           /*    .... doubly linked */
 };
 
+#ifdef __NuttX__
+
+static int inodeIndex = -1;
+
+static void allocInodeIndex(void) {
+	inodeIndex = task_tls_alloc(free);
+}
+
+static unixInodeInfo **getInodeList(void) {
+	static pthread_once_t once = PTHREAD_ONCE_INIT;
+	unixInodeInfo **value = NULL;
+
+	pthread_once(&once, allocInodeIndex);
+	value = (unixInodeInfo **)task_tls_get_value(inodeIndex);
+	if( value == NULL ) {
+		value = calloc(1, sizeof(unixInodeInfo *));
+		task_tls_set_value(inodeIndex, (uintptr_t)value);
+	}
+
+	return value;
+}
+
+#define inodeList (*(getInodeList()))
+#else
 static unixInodeInfo *inodeList = 0;
+#endif
+
 /*
  * Local memory allocation stuff.
  */
