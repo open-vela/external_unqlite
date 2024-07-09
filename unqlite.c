@@ -54022,8 +54022,11 @@ static UnixUnusedFd *findReusableFd(const char *zPath, int flags){
 
     unixEnterMutex();
     pInode = inodeList;
-    while( pInode && (pInode->fileId.dev!=sStat.st_dev
-                     || pInode->fileId.ino!=sStat.st_ino) ){
+    while ( pInode && (pInode->fileId.dev!=sStat.st_dev ||
+#if __NuttX__
+                      (strcmp(pInode->fileId.path, zPath)!=0) ||
+#endif
+                      pInode->fileId.ino!=sStat.st_ino) ){
        pInode = pInode->pNext;
     }
     if( pInode ){
