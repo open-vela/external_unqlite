@@ -52641,7 +52641,9 @@ UNQLITE_PRIVATE int unqliteOsAccess(
 #ifdef __NuttX__
 # include <nuttx/fs/ioctl.h>
 # include <sys/ioctl.h>
-# include <nuttx/tls.h>
+#  ifndef CONFIG_BUILD_KERNEL
+#  include <nuttx/tls.h>
+#  endif
 #endif
 /*
 ** Allowed values of unixFile.fsFlags
@@ -52921,7 +52923,7 @@ struct unixInodeInfo {
   unixInodeInfo *pPrev;           /*    .... doubly linked */
 };
 
-#ifdef __NuttX__
+#if defined(__NuttX__) && !defined(CONFIG_BUILD_KERNEL)
 
 static int inodeIndex = -1;
 
