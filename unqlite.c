@@ -4205,6 +4205,9 @@ UNQLITE_PRIVATE int unqliteGetPageSize(void)
 	}
 	return iSize;
 }
+#ifdef __NuttX__
+#include <syslog.h>
+#endif
 /*
  * Generate an error message.
  */
@@ -4215,6 +4218,9 @@ UNQLITE_PRIVATE int unqliteGenError(unqlite *pDb,const char *zErr)
 	rc = SyBlobAppend(&pDb->sErr,(const void *)zErr,SyStrlen(zErr));
 	/* Append a new line */
 	SyBlobAppend(&pDb->sErr,(const void *)"\n",sizeof(char));
+#ifdef __NuttX__
+    syslog(LOG_ERR, "%s\n", zErr);
+#endif
 	return rc;
 }
 /*
@@ -4226,6 +4232,9 @@ UNQLITE_PRIVATE int unqliteGenErrorFormat(unqlite *pDb,const char *zFmt,...)
 	int rc;
 	va_start(ap,zFmt);
 	rc = SyBlobFormatAp(&pDb->sErr,zFmt,ap);
+#ifdef __NuttX__
+	vsyslog(LOG_ERR, zFmt, ap);
+#endif
 	va_end(ap);
 	/* Append a new line */
 	SyBlobAppend(&pDb->sErr,(const void *)"\n",sizeof(char));
