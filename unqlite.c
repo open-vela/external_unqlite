@@ -56859,12 +56859,14 @@ static int pager_shared_lock(Pager *pPager)
 				/* Rollback any hot journal */
 				rc = pager_journal_rollback(pPager,1);
 				if( rc != UNQLITE_OK ){
+					unqliteOsCloseFree(pPager->pAllocator,pPager->pfd);
 					return rc;
 				}
 			}
 			/* Read the database header */
 			rc = pager_read_db_header(pPager);
 			if( rc != UNQLITE_OK ){
+				unqliteOsCloseFree(pPager->pAllocator,pPager->pfd);
 				return rc;
 			}
 			if(pPager->dbSize > 0 ){
@@ -56899,6 +56901,7 @@ static int pager_shared_lock(Pager *pPager)
 						);
 					pager_unlock_db(pPager,NO_LOCK);
 					pPager->iState = PAGER_OPEN;
+					unqliteOsCloseFree(pPager->pAllocator,pPager->pfd);
 					return rc;
 				}
 			}
