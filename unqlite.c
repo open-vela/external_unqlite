@@ -56450,7 +56450,7 @@ end_playback:
 static int pager_unlock_db(Pager *pPager, int eLock)
 {
   int rc = UNQLITE_OK;
-  if( pPager->iLock != NO_LOCK ){
+  if( pPager->iLock != NO_LOCK && pPager->pfd ){
     rc = unqliteOsUnlock(pPager->pfd,eLock);
     pPager->iLock = eLock;
   }
@@ -56860,6 +56860,7 @@ static int pager_shared_lock(Pager *pPager)
 				rc = pager_journal_rollback(pPager,1);
 				if( rc != UNQLITE_OK ){
 					unqliteOsCloseFree(pPager->pAllocator,pPager->pfd);
+					pPager->pfd = 0;
 					return rc;
 				}
 			}
@@ -56867,6 +56868,7 @@ static int pager_shared_lock(Pager *pPager)
 			rc = pager_read_db_header(pPager);
 			if( rc != UNQLITE_OK ){
 				unqliteOsCloseFree(pPager->pAllocator,pPager->pfd);
+				pPager->pfd = 0;
 				return rc;
 			}
 			if(pPager->dbSize > 0 ){
@@ -56902,6 +56904,7 @@ static int pager_shared_lock(Pager *pPager)
 					pager_unlock_db(pPager,NO_LOCK);
 					pPager->iState = PAGER_OPEN;
 					unqliteOsCloseFree(pPager->pAllocator,pPager->pfd);
+					pPager->pfd = 0;
 					return rc;
 				}
 			}
