@@ -52642,7 +52642,7 @@ UNQLITE_PRIVATE int unqliteOsAccess(
 # include <nuttx/fs/ioctl.h>
 # include <sys/ioctl.h>
 #  ifndef CONFIG_BUILD_KERNEL
-#  include <nuttx/tls.h>
+#  include <nuttx/tls_task.h>
 #  endif
 #endif
 /*
