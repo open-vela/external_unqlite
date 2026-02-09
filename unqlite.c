@@ -3573,7 +3573,7 @@ UNQLITE_PRIVATE sxu32 unqlitePagerRandomNum(Pager *pPager);
  * That way it is clear in the code when we are using static variable because
  * its name start with sUnqlMPGlobal.
  */
-static struct unqlGlobal_Data
+struct unqlGlobal_Data
 {
 	SyMemBackend sAllocator;                /* Global low level memory allocator */
 #if defined(UNQLITE_ENABLE_THREADS)
@@ -3592,7 +3592,14 @@ static struct unqlGlobal_Data
 	sxi32 nDB;                             /* Total number of active DB handles */
 	unqlite *pDB;                          /* List of active DB handles */
 	sxu32 nMagic;                          /* Sanity check against library misuse */
-}sUnqlMPGlobal = {
+};
+#if defined(__NuttX__) && !defined(CONFIG_BUILD_KERNEL)
+#include <nuttx/tls_task.h>
+/* Forward declaration - defined after all types are visible (end of file) */
+static struct unqlGlobal_Data *getUnqlMPGlobal(void);
+#define sUnqlMPGlobal (*getUnqlMPGlobal())
+#else
+static struct unqlGlobal_Data sUnqlMPGlobal = {
 	{0, 0, 0, 0, 0, 0, 0, 0, {0}}, 
 #if defined(UNQLITE_ENABLE_THREADS)
 	0, 
@@ -3606,6 +3613,7 @@ static struct unqlGlobal_Data
 	0, 
 	0
 };
+#endif
 #define UNQLITE_LIB_MAGIC  0xEA1495BA
 #define UNQLITE_LIB_MISUSE (sUnqlMPGlobal.nMagic != UNQLITE_LIB_MAGIC)
 /*
@@ -7004,7 +7012,7 @@ UNQLITE_PRIVATE sxi32 FastJsonDecode(
  * That way it is clear in the code when we are using static variable because
  * its name start with sJx9MPGlobal.
  */
-static struct Jx9Global_Data
+struct Jx9Global_Data
 {
 	SyMemBackend sAllocator;                /* Global low level memory allocator */
 #if defined(JX9_ENABLE_THREADS)
@@ -7021,7 +7029,13 @@ static struct Jx9Global_Data
 	sxi32 nEngine;                          /* Total number of active engines */
 	jx9 *pEngines;                          /* List of active engine */
 	sxu32 nMagic;                           /* Sanity check against library misuse */
-}sJx9MPGlobal = {
+};
+#if defined(__NuttX__) && !defined(CONFIG_BUILD_KERNEL)
+/* Forward declaration - defined after all types are visible (end of file) */
+static struct Jx9Global_Data *getJx9MPGlobal(void);
+#define sJx9MPGlobal (*getJx9MPGlobal())
+#else
+static struct Jx9Global_Data sJx9MPGlobal = {
 	{0, 0, 0, 0, 0, 0, 0, 0, {0}}, 
 #if defined(JX9_ENABLE_THREADS)
 	0, 
@@ -7033,6 +7047,7 @@ static struct Jx9Global_Data
 	0, 
 	0
 };
+#endif
 #define JX9_LIB_MAGIC  0xEA1495BA
 #define JX9_LIB_MISUSE (sJx9MPGlobal.nMagic != JX9_LIB_MAGIC)
 /*
@@ -52924,27 +52939,8 @@ struct unixInodeInfo {
 };
 
 #if defined(__NuttX__) && !defined(CONFIG_BUILD_KERNEL)
-
-static int inodeIndex = -1;
-
-static void allocInodeIndex(void) {
-	inodeIndex = task_tls_alloc(free);
-}
-
-static unixInodeInfo **getInodeList(void) {
-	static pthread_once_t once = PTHREAD_ONCE_INIT;
-	unixInodeInfo **value = NULL;
-
-	pthread_once(&once, allocInodeIndex);
-	value = (unixInodeInfo **)task_tls_get_value(inodeIndex);
-	if( value == NULL ) {
-		value = calloc(1, sizeof(unixInodeInfo *));
-		task_tls_set_value(inodeIndex, (uintptr_t)value);
-	}
-
-	return value;
-}
-
+/* Forward declaration - defined after all types are visible (end of file) */
+static unixInodeInfo **getInodeList(void);
 #define inodeList (*(getInodeList()))
 #else
 static unixInodeInfo *inodeList = 0;
@@ -60284,6 +60280,68 @@ UNQLITE_PRIVATE int unqliteRegisterJx9Functions(unqlite_vm *pVm)
 	return rc;
 }
 /* END-OF-IMPLEMENTATION: unqlite@embedded@symisc 34-09-46 */
+
+/*
+ * Unified TLS (Task Local Storage) implementation for NuttX flat build.
+ *
+ * In NuttX flat build all tasks share the same address space, so static
+ * global variables are shared. unqlite was designed assuming per-process
+ * isolation, so we use TLS to give each task its own copy of the global
+ * state. All three variables share a single TLS index and a single
+ * allocation to minimize resource usage.
+ *
+ * All types (unqlGlobal_Data, Jx9Global_Data, unixInodeInfo) are now
+ * visible, so we can define the real struct and implementations here.
+ */
+#if defined(__NuttX__) && !defined(CONFIG_BUILD_KERNEL)
+struct unqliteTlsData {
+	struct unqlGlobal_Data unqlGlobal;
+	struct Jx9Global_Data jx9Global;
+	unixInodeInfo *pInodeListHead;
+};
+static int sUnqlTlsIndex = -1;
+static void freeUnqlTlsData(void *arg) {
+	struct unqliteTlsData *tls = (struct unqliteTlsData *)arg;
+	if( tls == NULL ) return;
+	/* Cleanup unqlGlobal */
+	SySetRelease(&tls->unqlGlobal.kv_storage);
+	if( tls->unqlGlobal.sAllocator.pMethods ){
+		SyMemBackendRelease(&tls->unqlGlobal.sAllocator);
+	}
+	/* Cleanup jx9Global */
+	if( tls->jx9Global.sAllocator.pMethods ){
+		SyMemBackendRelease(&tls->jx9Global.sAllocator);
+	}
+	free(tls);
+}
+static void allocUnqlTlsIndex(void) {
+	sUnqlTlsIndex = task_tls_alloc(freeUnqlTlsData);
+}
+static struct unqliteTlsData *getUnqlTlsData(void) {
+	static pthread_once_t once = PTHREAD_ONCE_INIT;
+	struct unqliteTlsData *tls;
+	pthread_once(&once, allocUnqlTlsIndex);
+	tls = (struct unqliteTlsData *)task_tls_get_value(sUnqlTlsIndex);
+	if( tls == NULL ){
+		tls = calloc(1, sizeof(struct unqliteTlsData));
+		if( tls ){
+			tls->unqlGlobal.iPageSize = UNQLITE_DEFAULT_PAGE_SIZE;
+		}
+		task_tls_set_value(sUnqlTlsIndex, (uintptr_t)tls);
+	}
+	return tls;
+}
+static struct unqlGlobal_Data *getUnqlMPGlobal(void) {
+	return &getUnqlTlsData()->unqlGlobal;
+}
+static struct Jx9Global_Data *getJx9MPGlobal(void) {
+	return &getUnqlTlsData()->jx9Global;
+}
+static unixInodeInfo **getInodeList(void) {
+	return &getUnqlTlsData()->pInodeListHead;
+}
+#endif /* __NuttX__ && !CONFIG_BUILD_KERNEL */
+
 /*
  * Symisc unQLite: An Embeddable NoSQL (Post Modern) Database Engine.
  * Copyright (C) 2012-2019, Symisc Systems http://unqlite.org/
